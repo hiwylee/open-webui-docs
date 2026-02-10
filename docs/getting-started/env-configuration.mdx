@@ -5443,9 +5443,20 @@ For multi-replica or high-availability deployments (Kubernetes, Docker Swarm), y
 #### `DATABASE_TYPE`
 
 - Type: `str`
+- Options: `sqlite`, `postgresql`, `sqlite+sqlcipher`, `oracle+oracledb`
 - Default: `None` (automatically set to `sqlite` if `DATABASE_URL` uses default SQLite path)
-- Description: Specifies the database type (e.g., `sqlite`, `postgresql`, `sqlite+sqlcipher`). This is used in conjunction with other individual parameters to construct the `DATABASE_URL` if a complete `DATABASE_URL` is not explicitly defined.
+- Description: Specifies the database type. This is used in conjunction with other individual parameters to construct the `DATABASE_URL` if a complete `DATABASE_URL` is not explicitly defined.
+  - `sqlite`: Standard SQLite database (default)
+  - `postgresql`: PostgreSQL database
+  - `sqlite+sqlcipher`: Encrypted SQLite database
+  - `oracle+oracledb`: Oracle 23ai or Oracle Autonomous Database
 - Persistence: No
+
+:::info
+
+For Oracle Database configuration, see the **[Oracle Database (Metadata DB)](#oracle-database-metadata-db)** section below for detailed setup instructions including wallet configuration, connection pooling, and usage examples.
+
+:::
 
 #### `DATABASE_USER`
 
@@ -5615,6 +5626,97 @@ More information about this setting can be found [here](https://docs.sqlalchemy.
 - Type: `bool`
 - Default: `False`
 - Description: Enables or disables SQLite WAL (Write-Ahead Logging) mode. When enabled, SQLite transactions can be managed more efficiently, allowing multiple readers and one writer concurrently, which can improve database performance, especially under high concurrency. **This setting only applies to SQLite databases.**
+
+### Oracle Database (Metadata DB)
+
+Open WebUI supports Oracle 23ai and Oracle Autonomous Database as the metadata database, providing enterprise-grade scalability and reliability.
+
+:::info
+
+**Oracle Support Requirements:**
+- Oracle Database 23ai or Oracle Autonomous Database (ADW/ATP)
+- Python `oracledb` driver (included in `pip install open-webui[all]`)
+- For Autonomous Database: Oracle Cloud Wallet files
+
+**Note:** Oracle metadata DB uses the same connection pool settings as other databases (`DATABASE_POOL_SIZE`, `DATABASE_POOL_MAX_OVERFLOW`, etc.)
+
+:::
+
+To use Oracle as your metadata database, set `DATABASE_TYPE=oracle+oracledb` and configure the following environment variables:
+
+#### `ORACLE_DB_USE_WALLET`
+
+- Type: `bool`
+- Default: `false`
+- Description: Determines the Oracle connection method.
+  - `false`: Direct connection to Oracle DBCS or Oracle 23ai Free (requires `ORACLE_DB_DSN` with `hostname:port/service_name` format)
+  - `true`: Wallet-based connection to Oracle Autonomous Database (requires `ORACLE_WALLET_DIR` and wallet files)
+
+#### `ORACLE_DB_DSN`
+
+- Type: `str`
+- Description: Data Source Name for Oracle connection.
+  - **Without wallet** (`ORACLE_DB_USE_WALLET=false`): `hostname:port/service_name` format (e.g., `localhost:1521/FREEPDB1`)
+  - **With wallet** (`ORACLE_DB_USE_WALLET=true`): TNS alias (e.g., `medium`, `high`) or full connection string
+
+#### `ORACLE_WALLET_DIR`
+
+- Type: `str`
+- Description: **Required when `ORACLE_DB_USE_WALLET=true`**. Absolute path to the directory containing Oracle Cloud Wallet files (`cwallet.sso`, `sqlnet.ora`, `tnsnames.ora`).
+- Example: `/app/wallet` or `/home/user/adb_wallet`
+
+#### `ORACLE_WALLET_PASSWORD`
+
+- Type: `str`
+- Default: `None` (optional)
+- Description: Password for the Oracle Cloud Wallet (if the wallet is password-protected).
+
+:::tip Oracle Connection Examples
+
+**Example 1: Oracle 23ai Free (No Wallet)**
+```bash
+DATABASE_TYPE=oracle+oracledb
+ORACLE_DB_USE_WALLET=false
+DATABASE_USER=DEMOUSER
+DATABASE_PASSWORD=Welcome123456
+ORACLE_DB_DSN=localhost:1521/FREEPDB1
+ENABLE_DB_MIGRATIONS=false
+```
+
+**Example 2: Oracle Autonomous Database (With Wallet)**
+```bash
+DATABASE_TYPE=oracle+oracledb
+ORACLE_DB_USE_WALLET=true
+DATABASE_USER=ADMIN
+DATABASE_PASSWORD=MySecurePassword123
+ORACLE_DB_DSN=medium
+ORACLE_WALLET_DIR=/app/wallet
+ORACLE_WALLET_PASSWORD=WalletPass
+ENABLE_DB_MIGRATIONS=false
+```
+
+**Example 3: Oracle DBCS (No Wallet, Custom Pool)**
+```bash
+DATABASE_TYPE=oracle+oracledb
+ORACLE_DB_USE_WALLET=false
+ORACLE_DB_USER=APPUSER
+ORACLE_DB_PASSWORD=AppPass123
+ORACLE_DB_DSN=dbhost.example.com:1521/MYDB
+DATABASE_POOL_SIZE=10
+DATABASE_POOL_MAX_OVERFLOW=20
+```
+
+:::
+
+:::warning Important Notes
+
+1. **Connection Pooling**: Oracle connections use SQLAlchemy's `QueuePool` with the standard `DATABASE_POOL_*` settings.
+2. **Automatic Compatibility**: Open WebUI automatically applies Oracle-specific type conversions (VARCHAR2 lengths, JSON handling, reserved word quoting).
+3. **Reserved Words**: Tables with Oracle reserved names (`file`, `group`, `prompt`) are automatically quoted.
+4. **No Automatic Migration**: Changing from another database to Oracle does not migrate existing data. Start with a fresh installation or migrate data manually.
+5. **Migrations**: For Oracle, it's recommended to set `ENABLE_DB_MIGRATIONS=false` and use SQLAlchemy's `create_all()` method for initial setup.
+
+:::
 
 ### Redis
 
